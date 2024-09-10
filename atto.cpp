@@ -12,17 +12,6 @@
 
 #include "keybinds.hpp"
 
-int line_numbers_offset_x(std::size_t max_y)
-{
-    int i = 5;
-    std::size_t y = max_y;
-    while (y / 10 > 10) {
-	y /= 10;
-	++i;
-    }
-    return i;
-}
-
 void line_numbers_draw(std::size_t offset_y, std::size_t max_y)
 {
     for (std::size_t k {0}; k < max_y; ++k) {
@@ -62,17 +51,8 @@ std::unordered_map<wint_t, cmd_t> keymap {
 	move(y, x);
     }},
 
-    {0x03 /* C-c */, [](std::size_t y, std::size_t x, std::size_t z) {
-	(void) x; (void)y; (void)z;
-	throw std::system_error {EINTR, std::system_category(), strerror(EINTR)};
-    }},
-
-    {0x13 /* C-s */, [](std::size_t y, std::size_t x, std::size_t z) {
-	(void) z;
-	getyx(stdscr, y, x);
-	mvprintw(0, 0, "# saving to file...");
-	move(y, x);
-    }}
+    {0x03 /* C-c */, key::shutdown},
+    {0x13 /* C-s */, key::save}
 };
 
 void work()

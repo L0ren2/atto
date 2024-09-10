@@ -1,9 +1,22 @@
 #ifndef KEYBINDS_HPP_
 #define KEYBINDS_HPP_
 
+#include <chrono>
+#include <thread>
 #include <curses.h>
 
 #define MODELINE_SIZE 2
+
+static inline std::size_t line_numbers_offset_x(std::size_t max_y)
+{
+    std::size_t i = 5;
+    std::size_t y = max_y;
+    while (y / 10 > 10) {
+	y /= 10;
+	++i;
+    }
+    return i;
+}
 
 static inline std::size_t get_eol_x()
 {
@@ -20,6 +33,40 @@ static inline std::size_t get_eol_x()
     ++m_x;
     move(r_y, r_x);
     return m_x;
+}
+
+static inline bool is_line_empty()
+{
+    std::size_t y, m_y, r_x, m_x, line_num_off_x;
+    getmaxyx(stdscr, m_y, m_x);
+    line_num_off_x = line_numbers_offset_x(m_y);
+    getyx(stdscr, y, r_x);
+    m_x = get_eol_x();
+    for (std::size_t x {line_num_off_x}; x < m_x; ++x) {
+	move(y, x);
+	if ((inch() & A_CHARTEXT) != ' ') {
+	    return false;
+	}
+    }
+    move(y, r_x);
+    return true;
+}
+
+static inline std::size_t get_last_line()
+{
+    std::size_t y, x , m_y, m_x;
+    getmaxyx(stdscr, m_y, m_x);
+    getyx(stdscr, y, x);
+    while (m_y) {
+	move(m_y, 0);
+	if (!is_line_empty()) {
+	    move(y, x);
+	    return m_y;
+	}
+	--m_y;
+    }
+    move(y, x);
+    return m_y;
 }
 
 static inline void move_cursor_to_eol()
@@ -136,6 +183,57 @@ namespace key {
     {
 	(void) x;
 	move(y, line_num_off_x);
+    }
+    static inline void shutdown(std::size_t y, std::size_t x, std::size_t z)
+    {
+	(void) y; (void) x; (void) z;
+	throw std::system_error {EINTR, std::system_category(), strerror(EINTR)};
+    }
+    static inline void save(std::size_t y, std::size_t x,
+			    std::size_t line_num_off_x)
+    {
+	std::size_t m_y, m_x;
+	getmaxyx(stdscr, m_y, m_x);
+	std::size_t box_size_y {m_y / 2};
+	std::size_t box_size_x {m_x / 2};
+	std::size_t min_box_size_y {5};
+	std::size_t min_box_size_y {30};
+	if (box_size_y < min_box_size_y) {
+	    if (m_y < min_box_size_y) {
+		throw std::runtime_error {"window is too small!"};
+	    }
+	    box_size_y = min_box_size_y;
+	}
+	if (box_size_x < min_box_size_x) {
+	    if (m_x < min_box_size_x) {
+		throw std::runtime_error {"window is too small!"};
+	    }
+	    box_size_x = min_box_size_x;
+	}
+	std::size_t box_pos_y {(m_y - box_size_y) / 2};
+	std::size_t box_pos_x {(m_x - box_size_x) / 2};
+	auto* win = newwin(box_size_y, box_size_x, box_pos_y, box_pos_x);
+	if (!win) {
+	    throw std::runtime_error {"could not create window"};
+	}
+	box(win, 0, 0);
+	if (box_size_y > min_box_size_y) {
+	    mvwprintw(win, 1, 2, "Save buffer as:");
+	    mvwprintw(win, 3, 2, "____________________");
+	    mvwprintw(win, 5, 2, "Save <RET>   Cancel <ESC>");
+	    wmove(win, 3, 2);
+	}
+	if (wrefresh(win) != OK) {
+	    throw std::runtime_error {"could not refresh window"};
+	}
+	std::this_thread::sleep_for(std::chrono::seconds {1});
+	if (delwin(win) != OK) {
+	    throw std::runtime_error {"could not delete window"};
+	}
+	win = nullptr;
+	if (redrawwin(stdscr) != OK) {
+	    throw std::runtime_error {"could not refresh window"};
+	}
     }
 }
 #endif // KEYBINDS_HPP_
