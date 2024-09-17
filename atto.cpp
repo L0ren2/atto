@@ -91,7 +91,7 @@ void work()
 	if (keymap.find(wi) == keymap.end()) {
 	    // just insert it
 	    cchar_t cc {};
-	    cc.chars[0] = (wchar_t)wi;
+	    cc.chars[0] = static_cast<wchar_t>(wi);
 	    if (add_wch(&cc) != OK) {
 		throw std::runtime_error {"could not print character"};
 	    }

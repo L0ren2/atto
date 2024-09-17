@@ -189,15 +189,14 @@ namespace key {
 	(void) y; (void) x; (void) z;
 	throw std::system_error {EINTR, std::system_category(), strerror(EINTR)};
     }
-    static inline void save(std::size_t y, std::size_t x,
-			    std::size_t line_num_off_x)
+    static inline std::string prompt_for_filename()
     {
 	std::size_t m_y, m_x;
 	getmaxyx(stdscr, m_y, m_x);
 	std::size_t box_size_y {m_y / 2};
 	std::size_t box_size_x {m_x / 2};
 	std::size_t min_box_size_y {5};
-	std::size_t min_box_size_y {30};
+	std::size_t min_box_size_x {30};
 	if (box_size_y < min_box_size_y) {
 	    if (m_y < min_box_size_y) {
 		throw std::runtime_error {"window is too small!"};
@@ -216,17 +215,44 @@ namespace key {
 	if (!win) {
 	    throw std::runtime_error {"could not create window"};
 	}
+	if (keypad(win, true) != OK) {
+	    throw std::runtime_error {"could not activate keypad mode"};
+	}
 	box(win, 0, 0);
 	if (box_size_y > min_box_size_y) {
 	    mvwprintw(win, 1, 2, "Save buffer as:");
-	    mvwprintw(win, 3, 2, "____________________");
+	    mvwprintw(win, 3, 2, "_________________________");
 	    mvwprintw(win, 5, 2, "Save <RET>   Cancel <ESC>");
 	    wmove(win, 3, 2);
 	}
-	if (wrefresh(win) != OK) {
+	if (redrawwin(win) != OK) {
 	    throw std::runtime_error {"could not refresh window"};
 	}
-	std::this_thread::sleep_for(std::chrono::seconds {1});
+	wint_t wi;
+	cchar_t cc {};
+	std::string str {};
+	bool escaped {false};
+	while (wget_wch(win, &wi) != ERR) {
+	    if (wi == KEY_ENTER) {
+		// ENTER was pressed
+		break;
+	    }
+	    else if (wi == 0x1b && wget_wch(win, &wi) == ERR) {
+		// ESC pressed
+		escaped = true;
+		break;
+	    }
+	    // ALT + char or just char pressed, ignore ALT keypresses
+	    cc.chars[0] = static_cast<wchar_t>(wi);
+	    str += cc.chars[0];
+	    if (wadd_wch(win, &cc) != OK) {
+		// printing char failed
+		break;
+	    }
+	    if (wrefresh(win) != OK) {
+		break;
+	    }
+	}
 	if (delwin(win) != OK) {
 	    throw std::runtime_error {"could not delete window"};
 	}
@@ -234,6 +260,18 @@ namespace key {
 	if (redrawwin(stdscr) != OK) {
 	    throw std::runtime_error {"could not refresh window"};
 	}
+	if (escaped) {
+	    return "";
+	}
+	return str;
+    }
+    static inline void save(std::size_t y, std::size_t x,
+			    std::size_t)
+    {
+	getyx(stdscr, y, x);
+	std::string str {prompt_for_filename()};
+	mvprintw(0, 0, "# filename: %s", str.c_str());
+	move(y, x);
     }
 }
 #endif // KEYBINDS_HPP_
